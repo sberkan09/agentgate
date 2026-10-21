@@ -124,3 +124,16 @@ def test_degrades_without_cmake_or_history(sandbox):
     assert r.total_tests is None
     assert r.tests == ["^x"]  # undiscoverable: identifiers pass through unexpanded
     assert r.reasons[-1].why.startswith("note:")
+
+
+def test_change_reaching_no_test_is_mode_none(sandbox):
+    from agentgate.config import Config
+    from agentgate.select import select_tests
+
+    sandbox.commit("tests", {"tests/test_a.py": "def test_a(): pass\n", "src/a.py": "x = 1\n"})
+    sandbox.branch("claude/t")
+    sandbox.commit("ci", {".github/workflows/x.yml": "name: x\n", "tool.cfg": "k = v\n"})
+    cfg = Config()
+    cfg.remote, cfg.base, cfg.runner, cfg.ignore = "", "main", "pytest", []
+    r = select_tests(sandbox.repo, cfg)
+    assert r.mode == "none" and r.tests == []

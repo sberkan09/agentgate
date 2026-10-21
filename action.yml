@@ -56,7 +56,11 @@ runs:
         set -euo pipefail
         BASE="${BASE_IN:-${{ github.base_ref || 'main' }}}"
         echo "AGENTGATE_BASE=$BASE" >> "$GITHUB_ENV"
-        git fetch -q --depth=200 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+        # A shallow checkout stays shallow (200 commits is enough for a merge base with recent work);
+        # a full checkout (fetch-depth: 0) is kept full, otherwise old branches lose their merge base.
+        DEPTH=()
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then DEPTH=(--depth=200); fi
+        git fetch -q "${DEPTH[@]}" origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
         PATTERNS="$PATTERNS_IN"
         if [ -z "$PATTERNS" ]; then
           PATTERNS="$(python - <<'EOF'
@@ -69,10 +73,10 @@ runs:
         IFS=',' read -ra PATS <<< "$PATTERNS"
         for p in "${PATS[@]}"; do
           p="$(echo "$p" | xargs)"
-          git fetch -q --depth=200 origin "+refs/heads/$p:refs/remotes/origin/$p" || true
+          git fetch -q "${DEPTH[@]}" origin "+refs/heads/$p:refs/remotes/origin/$p" || true
         done
         if [ -n "${{ github.head_ref }}" ]; then
-          git fetch -q --depth=200 origin "+refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}"
+          git fetch -q "${DEPTH[@]}" origin "+refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}"
         fi
 
     - name: Conflict forecast

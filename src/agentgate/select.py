@@ -223,6 +223,8 @@ def select_tests(
 
     report.tests = sorted(reasons)
     report.reasons = [SelectionReason(t, reasons[t]) for t in report.tests]
+    if not report.tests and names:
+        report.mode = "none"  # discovery worked and nothing reaches a test: config, scripts, workflows
     if notes:
         report.reasons.append(SelectionReason(NOTE_TEST, "note: " + "; ".join(notes)))
     return report
