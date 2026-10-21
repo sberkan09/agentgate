@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from agentgate import config as config_mod
 from agentgate.deps import cmake
 from agentgate.git import Repo
-from agentgate.select import select_tests
+from agentgate.select import match, select_tests
 
 PR_RE = re.compile(r"Merge pull request #(\d+)")
 CMAKE_RE = re.compile(r"(^|/)CMakeLists\.txt$|^cmake/|^CMakePresets\.json$")
@@ -188,8 +188,10 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"aggregate": agg, "prs": results}, indent=1) + "\n")
 
+    ign = config_mod.load(Path(a.config)).ignore
+
     def topfiles(r: dict) -> str:
-        fs = r["changed_files"]
+        fs = [f for f in r["changed_files"] if not any(match(f, g) for g in ign)]
         return ", ".join(f"`{f}`" for f in fs[:3]) + (f" (+{len(fs) - 3})" if len(fs) > 3 else "")
 
     L = [

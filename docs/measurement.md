@@ -8,7 +8,7 @@ Replay of `origin/dev_claude` first-parent merges (last 300 PRs), config `mesh_c
 - Hand rule = Python port of `gpu_irrelevant`/`sim_only`/`test_scope`/`touches_cmake` in `scripts/ci/local_ci.sh`;
   it decides on test labels (gpu/sdk/slow), agentgate on test names, so only the verdicts are compared.
 - No real test failure data: recall proxy only checks that tests whose own target sources changed are selected.
-- Select errors: 0. Wall time 108s, mean 0.333s per select.
+- Select errors: 0. Wall time 113s, mean 0.348s per select.
 
 ## agentgate mode
 | mode | PRs | share |
@@ -37,16 +37,16 @@ PRs with <= 50% of tests selected (subset or none): 227/300 (75.7%).
 ## Largest subset selections
 | PR | selected/total | changed | top files |
 | ---: | ---: | ---: | --- |
-| #542 | 173/214 | 11 | `changelog.d/WORKFLOW-7-defaults-load.md`, `docs/milestones/M-WORKFLOW.md`, `docs/user-guide/12-ui-and-console.md` (+8) |
-| #527 | 167/205 | 8 | `changelog.d/WORKFLOW-7-convar-defaults.md`, `docs/milestones/M-WORKFLOW.md`, `docs/user-guide/12-ui-and-console.md` (+5) |
-| #502 | 158/202 | 6 | `changelog.d/OPENWORLD-2-worldpoint-seam.md`, `docs/engine/refl.md`, `docs/milestones/M-OPENWORLD.md` (+3) |
-| #516 | 152/205 | 44 | `changelog.d/OPENWORLD-2-floating-origin.md`, `docs/engine/capabilities.md`, `docs/engine/ecs.md` (+41) |
-| #591 | 150/225 | 25 | `changelog.d/GH-406-items-catalog.md`, `docs/engine/capabilities.md`, `docs/milestones/M-FUZZ.md` (+22) |
-| #480 | 144/201 | 24 | `changelog.d/SBA-199-static-merge.md`, `docs/engine/capabilities.md`, `docs/user-guide/08-3d.md` (+21) |
-| #500 | 143/204 | 37 | `changelog.d/GH-500-road-network.md`, `docs/adr/0046-road-network.md`, `docs/adr/README.md` (+34) |
-| #541 | 139/209 | 20 | `changelog.d/WORKFLOW-7-defaults-chunk.md`, `docs/engine/capabilities.md`, `docs/milestones/M-WORKFLOW.md` (+17) |
-| #300 | 139/151 | 24 | `docs/ROADMAP.md`, `docs/engine/capabilities.md`, `docs/engine/kit.md` (+21) |
-| #333 | 137/167 | 18 | `CHANGELOG.md`, `docs/milestones/M-SCRIPT.md`, `docs/user-guide/27-scripting.md` (+15) |
+| #542 | 173/214 | 11 | `projects/Undertow/assets/defaults.mcdefaults`, `src/engine/asset/cook/src/cook.cpp`, `src/engine/asset/src/asset_system.cpp` (+5) |
+| #527 | 167/205 | 8 | `src/engine/core/include/mce/convar.h`, `src/engine/core/src/convar.cpp`, `src/player/src/player.cpp` (+1) |
+| #502 | 158/202 | 6 | `src/editor/mcp/src/values.cpp`, `src/engine/refl/include/mce/refl/macros.h`, `src/engine/refl/include/mce/refl/type.h` |
+| #516 | 152/205 | 44 | `scripts/ci/sample_coverage.allow`, `src/engine/ecs/CMakeLists.txt`, `src/engine/ecs/include/mce/ecs/origin.h` (+31) |
+| #591 | 150/225 | 25 | `src/editor/core/src/project.cpp`, `src/editor/mcp/src/asset_tools.cpp`, `src/engine/asset/CMakeLists.txt` (+17) |
+| #480 | 144/201 | 24 | `scripts/ci/sample_coverage.allow`, `src/editor/core/src/engine_components.cpp`, `src/editor/core/src/perf_file.cpp` (+17) |
+| #500 | 143/204 | 37 | `scripts/ci/sample_coverage.allow`, `src/editor/core/src/engine_components.cpp`, `src/editor/core/src/project.cpp` (+25) |
+| #541 | 139/209 | 20 | `src/editor/core/src/project.cpp`, `src/editor/mcp/src/asset_tools.cpp`, `src/engine/asset/cook/CMakeLists.txt` (+12) |
+| #300 | 139/151 | 24 | `src/editor/core/src/engine_components.cpp`, `src/editor/mcp/app/engine_components.cpp`, `src/engine/core/include/mce/fixed_string.h` (+14) |
+| #333 | 137/167 | 18 | `samples/script_headless/main.cpp`, `src/engine/ecs/include/mce/ecs/world.h`, `src/engine/kit/include/mce/kit/bodies3d.h` (+12) |
 
 ## Recall proxy
 Own-source tests selected in 300/300 PRs; failing: 0.
