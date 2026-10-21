@@ -1,0 +1,28 @@
+# Dogfood: run the action from this checkout on our own pull requests.
+name: agentgate
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: ./
+        id: gate
+        with:
+          base: main
+          agent-branches: "claude/*,codex/*"
+      - run: |
+          echo "mode=${{ steps.gate.outputs.tests-mode }}"
+          echo "args=${{ steps.gate.outputs.tests-args }}"
+          echo "conflicting=${{ steps.gate.outputs.conflicting }}"
