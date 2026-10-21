@@ -32,7 +32,7 @@ import re
 from functools import lru_cache
 
 from .config import Config
-from .deps import closure, cpp, discover, history
+from .deps import closure, cmake, cpp, discover, history
 from .deps import python as pydeps
 from .git import Repo
 from .report import SelectionReason, SelectionReport
@@ -131,11 +131,13 @@ def select_tests(
     names: list[str] = []
     ct_index: discover.CtestIndex | None = None
     py_tests: list[str] = []
+    graph: cmake.CMakeGraph | None = None
     if cfg.runner == "ctest":
         defs = discover.discover_ctest(read, all_files)
-        names = [t.name for t in defs]
+        graph = cmake.parse_graph(read, all_files)
+        names = sorted({t.name for t in defs} | set(graph.tests))
         ct_index = discover.CtestIndex(defs)
-        if not defs:
+        if not names:
             notes.append("no CMake add_test() found; only always/map rules apply")
     elif cfg.runner == "pytest":
         py_tests = discover.discover_pytest(scoped)
@@ -170,14 +172,23 @@ def select_tests(
             notes.append("cpp dependency analysis disabled (deps.languages)")
         else:
             srcs = [f for f in scoped if cpp.is_cpp(f)]
+            changed_cpp = [f for f in changed if cpp.is_cpp(f)]
+            reach: dict[str, str] = {}
             if srcs:
-                reach = closure(cpp.build_reverse(read, srcs), [f for f in changed if cpp.is_cpp(f)])
+                reach = closure(cpp.build_reverse(read, srcs), changed_cpp)
                 for f, origin in sorted(reach.items()):
                     if f not in changed_set:
                         for t in ct_index.lookup(f):
                             add(t, f"dep:{origin}")
             else:
                 notes.append("no C/C++ files under deps.roots")
+            # Link graph: a changed or reached source belongs to a target; every test that links that
+            # target (transitively) observes the change even though nothing #includes a .cpp.
+            if graph is not None and graph.targets:
+                origin_of = {f: f for f in changed_cpp}
+                origin_of.update({f: o for f, o in reach.items() if f not in origin_of})
+                for test, f in graph.tests_for_files(list(origin_of)).items():
+                    add(test, f"link:{origin_of[f]}")
     elif cfg.runner == "pytest":
         for f in changed:
             if f in py_tests:

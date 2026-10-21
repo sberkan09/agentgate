@@ -77,3 +77,28 @@ def test_history_cochange(sandbox):
     sandbox.commit("solo", {"src/a.c": "9", "other.c": "1"})
     assert history.cochange(sandbox.repo, ["src/a.c"], 50) == {"tests/t.c": "src/a.c"}
     assert history.cochange(sandbox.repo, ["src/a.c"], 1) == {}
+
+
+def test_cmake_link_graph_maps_source_to_linking_tests():
+    from agentgate.deps.cmake import parse_graph
+
+    files = {
+        "src/lib/CMakeLists.txt": (
+            "set(_srcs src/a.cpp src/b.cpp)\nmy_add_library(mylib SOURCES ${_srcs} PUBLIC_DEPS ns::core)\n"
+        ),
+        "src/core/CMakeLists.txt": "add_library(core STATIC core.cpp)\n",
+        "tests/CMakeLists.txt": (
+            "my_add_test(test_lib SOURCES test_lib.cpp DEPS ns::mylib)\n"
+            "add_executable(other other.cpp)\n"
+            "target_link_libraries(other PRIVATE core)\n"
+            "add_test(NAME other_test COMMAND other)\n"
+            "add_test(NAME unrelated COMMAND ${PROJECT_SOURCE_DIR}/tools/x.py)\n"
+        ),
+    }
+    g = parse_graph(lambda p: files[p], list(files))
+    assert g.targets["mylib"].sources == {"src/lib/src/a.cpp", "src/lib/src/b.cpp"}
+    assert g.targets["mylib"].deps == {"core"}
+    assert g.tests["other_test"] == "other"
+    assert g.tests_for_files(["src/lib/src/a.cpp"]) == {"test_lib": "src/lib/src/a.cpp"}
+    hit = g.tests_for_files(["src/core/core.cpp"])
+    assert set(hit) == {"test_lib", "other_test"}
