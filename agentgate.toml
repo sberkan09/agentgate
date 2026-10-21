@@ -1,0 +1,11 @@
+[agentgate]
+base = "main"
+agent_branches = ["claude/*", "codex/*", "copilot/*"]
+
+[tests]
+runner = "pytest"
+full_on = ["pyproject.toml", "tests/conftest.py"]
+
+[deps]
+languages = ["python"]
+roots = ["src", "tests"]

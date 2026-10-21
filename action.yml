@@ -1,35 +1,35 @@
 name: agentgate
-description: Conflict forecast between open agent branches and task-scoped test selection for the PR.
+description: "Conflict forecast between open agent branches and task-scoped test selection for the PR."
 branding:
   icon: git-merge
   color: purple
 
 inputs:
   base:
-    description: Base branch (default: the PR base, else main)
+    description: "Base branch (default: the PR base, else main)"
     default: ""
   config:
-    description: Path to agentgate.toml (default: repo root)
+    description: "Path to agentgate.toml (default: repo root)"
     default: ""
   agent-branches:
-    description: Comma-separated branch globs to forecast conflicts among (default: from config)
+    description: "Comma-separated branch globs to forecast conflicts among (default: from config)"
     default: ""
   fail-on-conflict:
-    description: Fail the step when the PR branch conflicts with another open agent branch
+    description: "Fail the step when the PR branch conflicts with another open agent branch"
     default: "false"
   comment:
-    description: Post / update a sticky comment on the pull request
+    description: "Post / update a sticky comment on the pull request"
     default: "true"
   version:
-    description: agentgate version to install (pip spec, or "local" to use this checkout)
+    description: "agentgate version to install (pip spec, or 'local' to use this checkout)"
     default: "local"
 
 outputs:
   tests-args:
-    description: Runner argument string for the selected tests (empty = run everything)
+    description: "Runner argument string for the selected tests (empty = run everything)"
     value: ${{ steps.select.outputs.args }}
   tests-mode:
-    description: full | subset | none
+    description: "full | subset | none"
     value: ${{ steps.select.outputs.mode }}
   conflicting:
     description: "true when the PR branch conflicts with another open agent branch"
@@ -86,11 +86,14 @@ runs:
         IFS=',' read -ra PATS <<< "$AGENTGATE_PATTERNS"
         for p in "${PATS[@]}"; do ARGS+=(--pattern "$(echo "$p" | xargs)"); done
         [ -n "${{ github.head_ref }}" ] && ARGS+=(--head "origin/${{ github.head_ref }}")
-        agentgate "${ARGS[@]}" > .agentgate/conflicts.md; rc=$?
+        agentgate "${ARGS[@]}" > .agentgate/conflicts.md 2> .agentgate/conflicts.err; rc=$?
+        if [ "$rc" -gt 1 ]; then
+          echo "::error::agentgate conflicts failed (exit $rc): $(cat .agentgate/conflicts.err)"
+          exit "$rc"
+        fi
         cat .agentgate/conflicts.md >> "$GITHUB_STEP_SUMMARY"
         conflicting=$(python -c "import json;print(str(bool(json.load(open('.agentgate/conflicts.json'))['pairs'])).lower())")
         echo "conflicting=$conflicting" >> "$GITHUB_OUTPUT"
-        [ "$rc" -le 1 ] || exit "$rc"
 
     - name: Test selection
       id: select
