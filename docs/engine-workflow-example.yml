@@ -1,0 +1,38 @@
+# Example: how a consumer repository (here: a CMake/ctest project) wires agentgate in.
+# Copy to .github/workflows/agentgate.yml in the consumer repo.
+name: agentgate
+on:
+  pull_request:
+    branches: [dev_claude]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: sberkan09/agentgate@main
+        id: gate
+        with:
+          base: dev_claude
+          agent-branches: "claude/*,codex/*"
+          fail-on-conflict: false
+
+      # The consumer decides what to do with the selection. Example for ctest:
+      - name: Run the selected tests
+        if: steps.gate.outputs.tests-mode != 'none'
+        run: |
+          if [ "${{ steps.gate.outputs.tests-mode }}" = "full" ]; then
+            ctest --preset linux-gcc-debug -LE slow
+          else
+            ctest --preset linux-gcc-debug -R '${{ steps.gate.outputs.tests-args }}'
+          fi

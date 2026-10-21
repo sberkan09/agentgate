@@ -1,0 +1,133 @@
+name: agentgate
+description: Conflict forecast between open agent branches and task-scoped test selection for the PR.
+branding:
+  icon: git-merge
+  color: purple
+
+inputs:
+  base:
+    description: Base branch (default: the PR base, else main)
+    default: ""
+  config:
+    description: Path to agentgate.toml (default: repo root)
+    default: ""
+  agent-branches:
+    description: Comma-separated branch globs to forecast conflicts among (default: from config)
+    default: ""
+  fail-on-conflict:
+    description: Fail the step when the PR branch conflicts with another open agent branch
+    default: "false"
+  comment:
+    description: Post / update a sticky comment on the pull request
+    default: "true"
+  version:
+    description: agentgate version to install (pip spec, or "local" to use this checkout)
+    default: "local"
+
+outputs:
+  tests-args:
+    description: Runner argument string for the selected tests (empty = run everything)
+    value: ${{ steps.select.outputs.args }}
+  tests-mode:
+    description: full | subset | none
+    value: ${{ steps.select.outputs.mode }}
+  conflicting:
+    description: "true when the PR branch conflicts with another open agent branch"
+    value: ${{ steps.conflicts.outputs.conflicting }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install agentgate
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" = "local" ]; then
+          pip install -q "${{ github.action_path }}"
+        else
+          pip install -q "agentgate${{ inputs.version }}"
+        fi
+
+    - name: Fetch base and agent branches
+      shell: bash
+      env:
+        BASE_IN: ${{ inputs.base }}
+        PATTERNS_IN: ${{ inputs.agent-branches }}
+      run: |
+        set -euo pipefail
+        BASE="${BASE_IN:-${{ github.base_ref || 'main' }}}"
+        echo "AGENTGATE_BASE=$BASE" >> "$GITHUB_ENV"
+        git fetch -q --depth=200 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+        PATTERNS="$PATTERNS_IN"
+        if [ -z "$PATTERNS" ]; then
+          PATTERNS="$(python - <<'EOF'
+        from agentgate import config
+        print(",".join(config.load(__import__("pathlib").Path(".")).agent_branches))
+        EOF
+        )"
+        fi
+        echo "AGENTGATE_PATTERNS=$PATTERNS" >> "$GITHUB_ENV"
+        IFS=',' read -ra PATS <<< "$PATTERNS"
+        for p in "${PATS[@]}"; do
+          p="$(echo "$p" | xargs)"
+          git fetch -q --depth=200 origin "+refs/heads/$p:refs/remotes/origin/$p" || true
+        done
+        if [ -n "${{ github.head_ref }}" ]; then
+          git fetch -q --depth=200 origin "+refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}"
+        fi
+
+    - name: Conflict forecast
+      id: conflicts
+      shell: bash
+      run: |
+        set -uo pipefail
+        mkdir -p .agentgate
+        ARGS=(conflicts --base "$AGENTGATE_BASE" --output .agentgate/conflicts.json)
+        [ -n "${{ inputs.config }}" ] && ARGS+=(--config "${{ inputs.config }}")
+        IFS=',' read -ra PATS <<< "$AGENTGATE_PATTERNS"
+        for p in "${PATS[@]}"; do ARGS+=(--pattern "$(echo "$p" | xargs)"); done
+        [ -n "${{ github.head_ref }}" ] && ARGS+=(--head "origin/${{ github.head_ref }}")
+        agentgate "${ARGS[@]}" > .agentgate/conflicts.md; rc=$?
+        cat .agentgate/conflicts.md >> "$GITHUB_STEP_SUMMARY"
+        conflicting=$(python -c "import json;print(str(bool(json.load(open('.agentgate/conflicts.json'))['pairs'])).lower())")
+        echo "conflicting=$conflicting" >> "$GITHUB_OUTPUT"
+        [ "$rc" -le 1 ] || exit "$rc"
+
+    - name: Test selection
+      id: select
+      shell: bash
+      run: |
+        set -euo pipefail
+        ARGS=(select --base "$AGENTGATE_BASE" --output .agentgate/select.json)
+        [ -n "${{ inputs.config }}" ] && ARGS+=(--config "${{ inputs.config }}")
+        agentgate "${ARGS[@]}" > .agentgate/select.md
+        cat .agentgate/select.md >> "$GITHUB_STEP_SUMMARY"
+        agentgate "${ARGS[@]}" --format args > .agentgate/select.args
+        {
+          echo "args<<EOF"; cat .agentgate/select.args; echo; echo "EOF"
+          echo "mode=$(python -c "import json;print(json.load(open('.agentgate/select.json'))['mode'])")"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Sticky PR comment
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        MARK="<!-- agentgate -->"
+        { echo "$MARK"; cat .agentgate/conflicts.md; echo; cat .agentgate/select.md; } > .agentgate/comment.md
+        PR=${{ github.event.pull_request.number }}
+        ID=$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate \
+             --jq ".[] | select(.body | startswith(\"$MARK\")) | .id" | head -1 || true)
+        if [ -n "$ID" ]; then
+          gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$ID" -F body=@.agentgate/comment.md > /dev/null
+        else
+          gh api "repos/${{ github.repository }}/issues/$PR/comments" -F body=@.agentgate/comment.md > /dev/null
+        fi
+
+    - name: Fail on conflict
+      if: inputs.fail-on-conflict == 'true' && steps.conflicts.outputs.conflicting == 'true'
+      shell: bash
+      run: |
+        echo "::error::this branch conflicts with another open agent branch (see the job summary)"
+        exit 1
