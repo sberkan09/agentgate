@@ -23,13 +23,14 @@ class ConflictReport:
     base: str
     head: str | None
     branches: list[str]
-    pairs: list[ConflictPair]
+    pairs: list[ConflictPair]  # branch-vs-branch, both previewed on top of the base
+    base_conflicts: list[ConflictPair] = field(default_factory=list)  # branch-vs-base: needs a rebase
     merge_order: list[str] = field(default_factory=list)  # suggested order, least entangled first
     errors: list[str] = field(default_factory=list)
 
     @property
     def conflicting(self) -> bool:
-        return bool(self.pairs)
+        return bool(self.pairs) or bool(self.base_conflicts)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -39,9 +40,27 @@ class ConflictReport:
         scope = f"`{self.head}` against" if self.head else "all pairs among"
         lines.append(f"{scope} {len(self.branches)} open agent branch(es), base `{self.base}`.")
         lines.append("")
+        if self.base_conflicts:
+            lines.append(
+                f"**Behind the base and conflicting with it** ({len(self.base_conflicts)}): rebase first."
+            )
+            lines.append("")
+            lines.append("| Branch | Conflicting files |")
+            lines.append("| --- | --- |")
+            for p in self.base_conflicts:
+                files = ", ".join(f"`{f}`" for f in p.files[:6]) + (" …" if len(p.files) > 6 else "")
+                lines.append(f"| `{p.a}` | {files} |")
+            lines.append("")
+        clean = len(self.branches) - len(self.base_conflicts)
         if not self.pairs:
-            lines.append("No conflicting pairs.")
+            lines.append(
+                f"No pair among the {clean} branch(es) that merge cleanly onto the base conflicts with another."
+            )
         else:
+            lines.append(
+                f"**Pairs that conflict with each other** ({len(self.pairs)}), previewed on top of the base:"
+            )
+            lines.append("")
             lines.append("| Branch A | Branch B | Conflicting files |")
             lines.append("| --- | --- | --- |")
             for p in self.pairs:

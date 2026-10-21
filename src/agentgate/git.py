@@ -35,6 +35,9 @@ class Repo:
     def merge_base(self, a: str, b: str) -> str:
         return self.out("merge-base", a, b)
 
+    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
+        return self.run("merge-base", "--is-ancestor", ancestor, descendant, check=False).returncode == 0
+
     def changed_files(self, base: str, head: str = "HEAD", include_untracked: bool = False) -> list[str]:
         """Files changed between merge-base(base, head) and head, sorted and unique."""
         mb = self.merge_base(base, head)
