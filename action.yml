@@ -86,11 +86,14 @@ runs:
         IFS=',' read -ra PATS <<< "$AGENTGATE_PATTERNS"
         for p in "${PATS[@]}"; do ARGS+=(--pattern "$(echo "$p" | xargs)"); done
         [ -n "${{ github.head_ref }}" ] && ARGS+=(--head "origin/${{ github.head_ref }}")
-        agentgate "${ARGS[@]}" > .agentgate/conflicts.md; rc=$?
+        agentgate "${ARGS[@]}" > .agentgate/conflicts.md 2> .agentgate/conflicts.err; rc=$?
+        if [ "$rc" -gt 1 ]; then
+          echo "::error::agentgate conflicts failed (exit $rc): $(cat .agentgate/conflicts.err)"
+          exit "$rc"
+        fi
         cat .agentgate/conflicts.md >> "$GITHUB_STEP_SUMMARY"
         conflicting=$(python -c "import json;print(str(bool(json.load(open('.agentgate/conflicts.json'))['pairs'])).lower())")
         echo "conflicting=$conflicting" >> "$GITHUB_OUTPUT"
-        [ "$rc" -le 1 ] || exit "$rc"
 
     - name: Test selection
       id: select

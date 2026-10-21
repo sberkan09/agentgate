@@ -160,3 +160,14 @@ def test_pairs_are_previewed_on_top_of_base(sandbox):
     sandbox.as_remote_tracking()
     r = forecast(repo, cfg(), patterns=["claude/*"])
     assert r.base_conflicts == [] and r.pairs == []
+
+
+def test_forecast_needs_no_git_identity(sandbox, monkeypatch):
+    repo = setup(sandbox, {"claude/a": {"a.txt": "a\n"}, "claude/b": {"b.txt": "b\n"}})
+    sandbox.repo.run("config", "--unset", "user.email")
+    sandbox.repo.run("config", "--unset", "user.name")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", "/dev/null")
+    monkeypatch.setenv("GIT_CONFIG_SYSTEM", "/dev/null")
+    monkeypatch.delenv("EMAIL", raising=False)
+    r = forecast(repo, cfg(), patterns=["claude/*"])
+    assert r.errors == [] and r.pairs == []

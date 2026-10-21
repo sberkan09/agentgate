@@ -104,7 +104,19 @@ def _preview_on_base(repo: Repo, base: str, branch: str, report: ConflictReport)
     if rc != 0 or not tree:
         report.errors.append(f"{branch}: merge-tree with {base} failed ({rc}): {detail}")
         return None
-    return repo.out("commit-tree", tree, "-p", base, "-m", f"agentgate preview of {branch}")
+    # commit-tree needs an author even for a throwaway object; CI runners rarely have one configured.
+    return repo.out(
+        "-c",
+        "user.name=agentgate",
+        "-c",
+        "user.email=agentgate@localhost",
+        "commit-tree",
+        tree,
+        "-p",
+        base,
+        "-m",
+        f"agentgate preview of {branch}",
+    )
 
 
 def _check_pair(
