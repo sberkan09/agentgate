@@ -50,3 +50,28 @@ PRs with <= 50% of tests selected (subset or none): 227/300 (75.7%).
 
 ## Recall proxy
 Own-source tests selected in 300/300 PRs; failing: 0.
+
+## Live run, 2026-10-21 to 2026-11-06
+
+The workflow has run on the same repository since 2026-10-21 as a PR comment (observation only; the
+repository's own `local_ci.sh --task` stayed the gate). In that window the repository took 469 PRs,
+all from agents, and moved its base branch from `dev_claude` to `master`. Sample: the last 57 PRs with a
+comment (#1086–#1145, 2026-11-05/06); 33 workflow runs on 2026-11-05/06, 32 green, 1 failed with git exit
+128 (the PR head was gone by the time the step fetched it; the step is now tolerant).
+
+| | offline replay (300 PRs) | live (57 PRs) |
+| --- | ---: | ---: |
+| mode none (nothing reaches a test) | 12% | 23% |
+| mode full | 6% | 4% |
+| mode subset | 82% | 74% |
+| selected fraction, subset PRs, mean | 31.9% | 18.2% |
+| selected fraction, subset PRs, median | 33.0% | 5.0% |
+| suite size (ctest names) | 143–225 | 256–264 |
+
+Live PRs are smaller than the historical ones (a run of "harden" PRs changing 3–5 files selected 1–7 of
+~260 tests); PRs that touch core headers still select 120–178.
+
+Conflict forecast: one PR in 57 was itself behind the base; one pair of open branches conflicted. The
+"behind the base" table listed the same 9 branches on every comment; 6 of them had no open PR. That is
+noise, and the reason the action now takes the open PR heads as the branch set (12 → 4 branches on the
+day of the change, every one of them a real PR).
