@@ -14,6 +14,9 @@ inputs:
   agent-branches:
     description: "Comma-separated branch globs to forecast conflicts among (default: from config)"
     default: ""
+  open-prs-only:
+    description: "Forecast only against branches that have an open pull request (needs the GitHub API); otherwise every branch matching the globs"
+    default: "true"
   fail-on-conflict:
     description: "Fail the step when the PR branch conflicts with another open agent branch"
     default: "false"
@@ -52,6 +55,7 @@ runs:
       env:
         BASE_IN: ${{ inputs.base }}
         PATTERNS_IN: ${{ inputs.agent-branches }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
         BASE="${BASE_IN:-${{ github.base_ref || 'main' }}}"
@@ -76,7 +80,15 @@ runs:
           git fetch -q "${DEPTH[@]}" origin "+refs/heads/$p:refs/remotes/origin/$p" || true
         done
         if [ -n "${{ github.head_ref }}" ]; then
-          git fetch -q "${DEPTH[@]}" origin "+refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}"
+          # The PR branch may have been force-pushed or deleted since the event fired; the CLI then
+          # reports the missing head instead of the whole step failing with exit 128.
+          git fetch -q "${DEPTH[@]}" origin "+refs/heads/${{ github.head_ref }}:refs/remotes/origin/${{ github.head_ref }}" || true
+        fi
+        # Open PR heads: an abandoned branch with no PR is not open work and only adds noise.
+        : > .agentgate-open-branches
+        if [ "${{ inputs.open-prs-only }}" = "true" ]; then
+          gh api --paginate "repos/${{ github.repository }}/pulls?state=open&base=$BASE&per_page=100" \
+            --jq '.[].head.ref' > .agentgate-open-branches 2>/dev/null || : > .agentgate-open-branches
         fi
 
     - name: Conflict forecast
@@ -89,6 +101,16 @@ runs:
         [ -n "${{ inputs.config }}" ] && ARGS+=(--config "${{ inputs.config }}")
         IFS=',' read -ra PATS <<< "$AGENTGATE_PATTERNS"
         for p in "${PATS[@]}"; do ARGS+=(--pattern "$(echo "$p" | xargs)"); done
+        if [ -s .agentgate-open-branches ]; then
+          # Keep only the open PR heads that match the agent globs, as explicit branches.
+          while IFS= read -r b; do
+            for p in "${PATS[@]}"; do
+              p="$(echo "$p" | xargs)"
+              # shellcheck disable=SC2254
+              case "$b" in $p) ARGS+=(--branch "$b"); break ;; esac
+            done
+          done < .agentgate-open-branches
+        fi
         [ -n "${{ github.head_ref }}" ] && ARGS+=(--head "origin/${{ github.head_ref }}")
         agentgate "${ARGS[@]}" > .agentgate/conflicts.md 2> .agentgate/conflicts.err; rc=$?
         if [ "$rc" -gt 1 ]; then

@@ -171,3 +171,17 @@ def test_forecast_needs_no_git_identity(sandbox, monkeypatch):
     monkeypatch.delenv("EMAIL", raising=False)
     r = forecast(repo, cfg(), patterns=["claude/*"])
     assert r.errors == [] and r.pairs == []
+
+
+def test_explicit_branch_list_replaces_pattern_discovery(sandbox):
+    repo = setup(
+        sandbox,
+        {
+            "claude/a": {"shared.txt": "line1\nA\nline3\n"},
+            "claude/b": {"shared.txt": "line1\nB\nline3\n"},
+            "claude/abandoned": {"shared.txt": "line1\nX\nline3\n"},
+        },
+    )
+    r = forecast(repo, cfg(), patterns=["claude/*"], branches_explicit=["claude/a", "claude/b", "nope"])
+    assert sorted(r.branches) == ["origin/claude/a", "origin/claude/b"]
+    assert len(r.pairs) == 1

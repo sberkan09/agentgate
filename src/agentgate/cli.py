@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common(c)
     c.add_argument("--head", default=None, help="only pairs involving this branch (default: all pairs)")
     c.add_argument("--pattern", action="append", default=None, help="agent branch glob (repeatable)")
+    c.add_argument(
+        "--branch",
+        action="append",
+        default=None,
+        help="explicit open branch (repeatable; e.g. the heads of open PRs). Replaces pattern discovery.",
+    )
     c.add_argument("--fail-on-conflict", action="store_true", help="exit 1 when any pair conflicts")
 
     s = sub.add_parser("select", help="select the tests affected by the change since the base")
@@ -52,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "conflicts":
             from .conflicts import forecast
 
-            report = forecast(repo, cfg, head=args.head, patterns=args.pattern)
+            report = forecast(repo, cfg, head=args.head, patterns=args.pattern, branches_explicit=args.branch)
             text = report.to_json() if args.format == "json" else report.to_markdown()
             rc = 1 if (args.fail_on_conflict and report.conflicting) else 0
         else:

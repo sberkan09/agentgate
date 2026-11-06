@@ -4,8 +4,9 @@ Contract (implemented in task #3):
 
     forecast(repo, cfg, head=None, patterns=None) -> ConflictReport
 
-- branches = every remote-tracking branch matching cfg.agent_branches (or ``patterns``), excluding the base;
-  when ``head`` is given it is included even if it does not match, and only pairs with it are checked.
+- branches = ``branches_explicit`` when given (the heads of open PRs), else every remote-tracking branch
+  matching cfg.agent_branches (or ``patterns``); excluding the base and anything merged into it. When
+  ``head`` is given it is included even if it does not match, and only pairs with it are checked.
 - Two questions are answered, both with ``git merge-tree --write-tree --name-only``:
   1. Does the branch conflict with the base as it stands today? (``base_conflicts``: the branch needs a
      rebase before anything else.) Computed as merge-tree(base, branch).
@@ -39,21 +40,33 @@ def _resolves(repo: Repo, ref: str) -> bool:
     return True
 
 
-def _discover(repo: Repo, cfg: Config, patterns: list[str]) -> list[str]:
-    """Agent branches matching the patterns, minus the base and minus branches already merged into it.
+def _discover(repo: Repo, cfg: Config, patterns: list[str], explicit: list[str] | None = None) -> list[str]:
+    """Open agent branches: the explicit list when given (the heads of open PRs, say), else every
+    remote-tracking branch matching the patterns; minus the base and minus branches already merged into it.
 
-    A merged-but-not-deleted branch is not open work: pairing it with live branches only produces noise.
+    A merged-but-not-deleted branch is not open work, and so is an abandoned branch with no PR: pairing
+    either with live branches only produces noise. Live data (469 PRs on one repo): 6 of the 9 branches
+    flagged "behind the base" on every PR had no open PR at all.
     """
     exclude = {cfg.base_ref, cfg.base}
     base_known = _resolves(repo, cfg.base_ref)
+    candidates: list[str] = []
+    if explicit is not None:
+        for name in explicit:  # prefer the remote-tracking form, like pattern discovery
+            if cfg.remote and _resolves(repo, f"{cfg.remote}/{name}"):
+                candidates.append(f"{cfg.remote}/{name}")
+            elif _resolves(repo, name):
+                candidates.append(name)
+    else:
+        for pattern in patterns:
+            candidates.extend(repo.branches(pattern, remote=cfg.remote))
     found: list[str] = []
-    for pattern in patterns:
-        for name in repo.branches(pattern, remote=cfg.remote):
-            if name in exclude or name in found:
-                continue
-            if base_known and repo.is_ancestor(name, cfg.base_ref):
-                continue
-            found.append(name)
+    for name in candidates:
+        if name in exclude or name in found:
+            continue
+        if base_known and repo.is_ancestor(name, cfg.base_ref):
+            continue
+        found.append(name)
     return found
 
 
@@ -173,9 +186,10 @@ def forecast(
     head: str | None = None,
     patterns: list[str] | None = None,
     max_branches: int = DEFAULT_MAX_BRANCHES,
+    branches_explicit: list[str] | None = None,
 ) -> ConflictReport:
     report = ConflictReport(base=cfg.base_ref, head=head, branches=[], pairs=[])
-    branches = _discover(repo, cfg, patterns or cfg.agent_branches)
+    branches = _discover(repo, cfg, patterns or cfg.agent_branches, branches_explicit)
 
     if head is not None:
         resolved = _resolve_head(repo, cfg, head, branches)
